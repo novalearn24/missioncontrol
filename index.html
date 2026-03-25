@@ -1,41 +1,56 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>AI Mission Control v2.0</title>
+    <title>AI Robot Mission Control</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier"></script>
+    
     <style>
-        body { font-family: sans-serif; text-align: center; background: #0f172a; color: white; padding: 20px; }
-        #webcam { width: 320px; border-radius: 20px; border: 4px solid #3b82f6; display: none; margin: 0 auto; transform: scaleX(-1); }
-        .box { display: inline-block; width: 120px; padding: 20px; margin: 10px; border-radius: 15px; opacity: 0.1; font-weight: 800; border: 2px solid rgba(255,255,255,0.1); }
-        .active { opacity: 1; transform: scale(1.1); box-shadow: 0 0 20px #3b82f6; border-color: white; }
-        #box-0 { background: #a4c639; color: #1a1a2e; }
-        #box-1 { background: #e94e24; }
-        .btn { padding: 15px 25px; margin: 10px; border-radius: 10px; border: none; cursor: pointer; font-weight: bold; background: #2563eb; color: white; }
-        #log { background: #1e293b; padding: 15px; height: 120px; overflow-y: auto; margin: 20px auto; max-width: 500px; font-family: monospace; font-size: 12px; text-align: left; color: #4ade80; border-radius: 10px; }
+        body { font-family: sans-serif; text-align: center; background: #0f172a; color: white; padding: 20px; margin: 0; }
+        .container { max-width: 600px; margin: 0 auto; }
+        #webcam { width: 320px; border-radius: 20px; border: 4px solid #3b82f6; background: #000; transform: scaleX(-1); margin: 20px 0; }
+        
+        /* Dashboard Buttons */
+        .controls { background: #1e293b; padding: 20px; border-radius: 15px; margin-bottom: 20px; border: 1px solid #334155; }
+        .btn { padding: 15px 20px; margin: 5px; border-radius: 10px; border: none; cursor: pointer; font-weight: bold; color: white; transition: 0.2s; }
+        .btn-purple { background: #8b5cf6; width: 100%; font-size: 1.2rem; margin-bottom: 15px; }
+        .btn-blue { background: #2563eb; }
+        .btn-gray { background: #4b5563; }
+        
+        /* Status Boxes */
+        .box-container { display: flex; justify-content: center; gap: 10px; margin-top: 20px; }
+        .box { width: 140px; padding: 20px; border-radius: 15px; opacity: 0.1; font-weight: 800; border: 2px solid rgba(255,255,255,0.1); transition: 0.1s; }
+        .active { opacity: 1; transform: scale(1.05); box-shadow: 0 0 20px #3b82f6; border-color: white; }
+        #box-0 { background: #a4c639; color: #1a1a2e; } /* ME */
+        #box-1 { background: #e94e24; } /* WAMAO */
+        
+        #log { background: #000; padding: 15px; height: 120px; overflow-y: auto; margin-top: 20px; font-family: monospace; font-size: 12px; text-align: left; color: #4ade80; border-radius: 10px; border: 1px solid #334155; }
     </style>
 </head>
 <body>
 
-    <h2>🛰️ AI MISSION CONTROL</h2>
-    <button id="init-btn" class="btn" style="background:#8b5cf6; font-size:1.5rem;" onclick="startEverything()">1. START CAMERA & AI</button>
+    <div class="container">
+        <h2>🛰️ AI ROBOT DASHBOARD</h2>
 
-    <video autoplay playsinline muted id="webcam"></video>
-    <div id="status" style="margin: 15px; color: #94a3b8;">Status: Waiting...</div>
+        <div class="controls">
+            <button class="btn btn-purple" onclick="startCamera()">📷 1. START CAMERA & AI</button>
+            <br>
+            <button class="btn btn-blue" onclick="connectBT()">🔗 2. CONNECT MICRO:BIT</button>
+            
+            <button class="btn btn-gray" onclick="document.getElementById('loader').click()">📂 3. UPLOAD MODEL (.JSON)</button>
+            <input type="file" id="loader" style="display:none" onchange="loadModel(event)">
+        </div>
 
-    <div id="controls" style="display:none;">
-        <button class="btn" onclick="connectBT()">🔗 2. CONNECT MICRO:BIT</button>
-        <button class="btn" style="background:#4b5563" onclick="document.getElementById('loader').click()">📂 3. UPLOAD .JSON</button>
-        <input type="file" id="loader" style="display:none" onchange="loadModel(event)">
+        <video autoplay playsinline muted id="webcam"></video>
+        
+        <div class="box-container">
+            <div id="box-0" class="box">CLASS: ME<br>(Servo 0°)</div>
+            <div id="box-1" class="box">CLASS: WAMAO<br>(Servo 90°)</div>
+        </div>
+
+        <div id="log">Logs: Ready to initialize...</div>
     </div>
-
-    <div style="margin-top:20px;">
-        <div id="box-0" class="box">CLASS A<br>("me")</div>
-        <div id="box-1" class="box">CLASS B<br>("wamao")</div>
-    </div>
-
-    <div id="log">Logs: Please click the purple button.</div>
 
     <script>
         let net, classifier, uartChar;
@@ -49,24 +64,27 @@
             l.scrollTop = l.scrollHeight;
         }
 
-        async function startEverything() {
+        // STEP 1: INITIALIZE HARDWARE PERMISSIONS
+        async function startCamera() {
+            log("Requesting Camera...");
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true });
                 video.srcObject = stream;
-                video.style.display = "block";
-                log("Camera Active.");
+                log("✅ Camera Active.");
+                
+                log("Loading AI Brain...");
                 net = await mobilenet.load();
                 classifier = knnClassifier.create();
-                log("AI Brain Ready.");
-                document.getElementById('init-btn').style.display = 'none';
-                document.getElementById('controls').style.display = 'block';
+                log("✅ AI Ready. Please upload your model.");
+                
                 loop();
-            } catch (e) { log("Error: " + e.message); }
+            } catch (e) { log("❌ Camera Error: " + e.message); }
         }
 
+        // STEP 2: BLUETOOTH HANDSHAKE
         async function connectBT() {
             try {
-                log("Searching for any Micro:bit...");
+                log("Opening Bluetooth selector...");
                 const device = await navigator.bluetooth.requestDevice({
                     acceptAllDevices: true,
                     optionalServices: ['6e400001-b5a3-f393-e0a9-e50e24dcca9e']
@@ -74,24 +92,28 @@
                 const server = await device.gatt.connect();
                 const service = await server.getPrimaryService('6e400001-b5a3-f393-e0a9-e50e24dcca9e');
                 uartChar = await service.getCharacteristic('6e400002-b5a3-f393-e0a9-e50e24dcca9e');
-                log("✅ CONNECTED! Happy Face should show.");
-            } catch (e) { log("Connection Failed: " + e.message); }
+                log("✅ CONNECTED to Micro:bit!");
+            } catch (e) { log("❌ BT Error: " + e.message); }
         }
 
+        // STEP 3: LOAD THE JSON
         async function loadModel(event) {
             const reader = new FileReader();
             reader.onload = async (e) => {
-                const model = JSON.parse(e.target.result);
-                const ds = {};
-                Object.keys(model.data).forEach(k => {
-                    ds[k] = tf.tensor2d(model.data[k], [model.data[k].length/1024, 1024]);
-                });
-                classifier.setClassifierDataset(ds);
-                log("✅ JSON Model Active.");
+                try {
+                    const model = JSON.parse(e.target.result);
+                    const ds = {};
+                    Object.keys(model.data).forEach(k => {
+                        ds[k] = tf.tensor2d(model.data[k], [model.data[k].length/1024, 1024]);
+                    });
+                    classifier.setClassifierDataset(ds);
+                    log("✅ AI Model Loaded & Running.");
+                } catch(err) { log("❌ JSON Error: Make sure it's a valid model file."); }
             };
             reader.readAsText(event.target.files[0]);
         }
 
+        // CONTINUOUS PREDICTION LOOP
         async function loop() {
             if (classifier && classifier.getNumClasses() > 0 && video.readyState >= 2) {
                 const img = tf.browser.fromPixels(video);
@@ -104,23 +126,26 @@
                 document.getElementById('box-1').classList.toggle('active', id == 1);
 
                 let signal = (id == 0) ? "me" : "wamao";
+                
                 if (signal !== lastSent && !isSending) {
-                    sendData(signal + "\n");
+                    sendToMicrobit(signal + "\n");
                     lastSent = signal;
                 }
             }
             requestAnimationFrame(loop);
         }
 
-        async function sendData(msg) {
+        // SEND TO HARDWARE
+        async function sendToMicrobit(msg) {
             if (!uartChar || isSending) return;
             isSending = true;
             try {
-                // Using writeValue (Fastest/Lofi-style)
                 await uartChar.writeValue(new TextEncoder().encode(msg));
                 log("Sent: " + msg.trim());
-            } catch (e) { log("Blocked: " + e.message); }
-            setTimeout(() => { isSending = false; }, 400); // 400ms breath for the Micro:bit
+            } catch (e) {
+                log("GATT Busy - skipping frame.");
+            }
+            setTimeout(() => { isSending = false; }, 600);
         }
     </script>
 </body>
