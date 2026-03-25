@@ -1,44 +1,49 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>AI Mission Control - CodePen Edition</title>
+    <title>AI Mission Control - GitHub Edition</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier"></script>
     <style>
         body { font-family: sans-serif; text-align: center; background: #0f172a; color: white; padding: 20px; }
-        #webcam { width: 320px; border-radius: 20px; border: 4px solid #3b82f6; background: #000; transform: scaleX(-1); }
-        .box { display: inline-block; width: 120px; padding: 20px 10px; margin: 10px; border-radius: 15px; color: white; opacity: 0.1; font-weight: 800; transition: 0.2s; border: 2px solid rgba(255,255,255,0.1); }
+        #webcam { width: 320px; border-radius: 20px; border: 4px solid #3b82f6; display: none; margin: 0 auto; transform: scaleX(-1); }
+        .box { display: inline-block; width: 120px; padding: 20px; margin: 10px; border-radius: 15px; opacity: 0.1; font-weight: 800; transition: 0.1s; border: 2px solid rgba(255,255,255,0.1); }
         .active { opacity: 1; transform: scale(1.1); box-shadow: 0 0 20px #3b82f6; border-color: white; }
         #box-0 { background: #a4c639; color: #1a1a2e; }
         #box-1 { background: #e94e24; }
         .btn { padding: 15px 20px; margin: 10px; border-radius: 10px; border: none; cursor: pointer; font-weight: bold; background: #2563eb; color: white; }
-        #log { background: #1e293b; padding: 15px; height: 100px; overflow-y: auto; margin: 20px auto; max-width: 500px; font-family: monospace; font-size: 12px; text-align: left; border-radius: 10px; color: #4ade80; }
+        #init-btn { background: #8b5cf6; padding: 30px; font-size: 1.5rem; width: 80%; max-width: 400px; }
+        #log { background: #1e293b; padding: 15px; height: 100px; overflow-y: auto; margin: 20px auto; max-width: 500px; font-family: monospace; font-size: 12px; text-align: left; color: #4ade80; border-radius: 10px; }
     </style>
 </head>
 <body>
 
-    <h2>🛰️ AI MISSION CONTROL</h2>
+    <h2>🛰️ MISSION CONTROL</h2>
+    
+    <button id="init-btn" class="btn" onclick="startEverything()">1. START CAMERA & AI</button>
+
     <video autoplay playsinline muted id="webcam"></video>
     
-    <div id="status" style="margin: 15px; color: #94a3b8;">System: Initializing AI...</div>
+    <div id="status" style="margin: 15px; color: #94a3b8;">Status: Waiting for User...</div>
 
-    <div>
-        <button class="btn" onclick="connectBT()">🔗 1. CONNECT MICRO:BIT</button>
-        <button class="btn" style="background:#4b5563" onclick="document.getElementById('loader').click()">📂 2. UPLOAD .JSON</button>
+    <div id="controls" style="display:none;">
+        <button class="btn" onclick="connectBT()">🔗 2. CONNECT MICRO:BIT</button>
+        <button class="btn" style="background:#4b5563" onclick="document.getElementById('loader').click()">📂 3. UPLOAD .JSON</button>
         <input type="file" id="loader" style="display:none" onchange="loadModel(event)">
     </div>
 
     <div style="margin-top:20px;">
-        <div id="box-0" class="box">CLASS A<br>(Sends "me")</div>
-        <div id="box-1" class="box">CLASS B<br>(Sends "wamao")</div>
+        <div id="box-0" class="box">CLASS A<br>("me")</div>
+        <div id="box-1" class="box">CLASS B<br>("wamao")</div>
     </div>
 
-    <div id="log">Logs: Loading MobileNet...</div>
+    <div id="log">Logs: Click the purple button to begin.</div>
 
     <script>
         let net, classifier, uartChar;
         let lastSent = "";
+        let isSending = false;
         const video = document.getElementById('webcam');
 
         function log(msg) {
@@ -47,20 +52,37 @@
             l.scrollTop = l.scrollHeight;
         }
 
-        // 1. INIT AI
-        async function init() {
+        // --- STEP 1: TRIGGER PERMISSIONS & LOAD AI ---
+        async function startEverything() {
+            document.getElementById('init-btn').innerText = "⌛ LOADING AI...";
+            log("Requesting Camera Permissions...");
+            
             try {
+                // This line triggers the browser's "Allow Camera?" pop-up
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { width: 320, height: 320 } 
+                });
+                video.srcObject = stream;
+                video.style.display = "block"; // Show camera once permitted
+                log("✅ Camera Permitted");
+
+                log("Downloading AI Brain (MobileNet)...");
                 net = await mobilenet.load();
                 classifier = knnClassifier.create();
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                video.srcObject = stream;
-                document.getElementById('status').innerText = "AI Ready. Connect & Load Model.";
-                log("Camera & AI Ready.");
-                loop();
-            } catch (e) { log("Camera Error: " + e); }
+                log("✅ AI Ready");
+
+                document.getElementById('init-btn').style.display = 'none';
+                document.getElementById('controls').style.display = 'block';
+                document.getElementById('status').innerText = "AI Ready. Connect & Load JSON.";
+                
+                loop(); // Start the recognition loop
+            } catch (e) {
+                log("❌ ERROR: " + e.message);
+                alert("Camera access denied! check the address bar for a blocked icon.");
+            }
         }
 
-        // 2. CONNECT BT (UART SERVICE)
+        // --- STEP 2: CONNECT BLUETOOTH ---
         async function connectBT() {
             try {
                 log("Requesting micro:bit...");
@@ -71,12 +93,12 @@
                 const server = await device.gatt.connect();
                 const service = await server.getPrimaryService('6e400001-b5a3-f393-e0a9-e50e24dcca9e');
                 uartChar = await service.getCharacteristic('6e400002-b5a3-f393-e0a9-e50e24dcca9e');
-                log("CONNECTED! UART Ready.");
-                document.getElementById('status').innerText = "BLUETOOTH CONNECTED ✅";
+                log("✅ BLUETOOTH CONNECTED!");
+                document.getElementById('status').innerText = "CONNECTED ✅";
             } catch (e) { log("BT Error: " + e); }
         }
 
-        // 3. LOAD JSON
+        // --- STEP 3: LOAD MODEL ---
         async function loadModel(event) {
             const reader = new FileReader();
             reader.onload = async (e) => {
@@ -87,12 +109,12 @@
                 });
                 classifier.setClassifierDataset(ds);
                 document.getElementById('status').innerText = "MODEL ACTIVE 🧠";
-                log("Model loaded successfully.");
+                log("✅ Model Loaded");
             };
             reader.readAsText(event.target.files[0]);
         }
 
-        // 4. THE AI LOOP
+        // --- STEP 4: PREDICTION LOOP ---
         async function loop() {
             if (classifier && classifier.getNumClasses() > 0 && video.readyState >= 2) {
                 const img = tf.browser.fromPixels(video);
@@ -100,40 +122,29 @@
                 const result = await classifier.predictClass(activation);
                 img.dispose();
 
-                const id = result.label; // "0" or "1"
+                const id = result.label;
                 document.getElementById('box-0').classList.toggle('active', id == 0);
                 document.getElementById('box-1').classList.toggle('active', id == 1);
 
-                // We map Class 0 to "me" and Class 1 to "wamao"
                 let signal = (id == 0) ? "me" : "wamao";
-                
-                if (signal !== lastSent) {
-                    sendBinary(signal + "\n");
+                if (signal !== lastSent && !isSending) {
+                    sendData(signal + "\n");
                     lastSent = signal;
                 }
             }
             requestAnimationFrame(loop);
         }
 
-        // 5. THE BINARY BYPASS (Saves us from GATT Errors)
-        async function sendBinary(str) {
+        // --- STEP 5: SEND DATA ---
+        async function sendData(msg) {
             if (!uartChar) return;
+            isSending = true;
             try {
-                // Convert string to Raw Bytes (Uint8Array)
-                const bytes = new TextEncoder().encode(str);
-                await uartChar.writeValue(bytes);
-                log("Sent: " + str.trim());
-            } catch (e) {
-                log("GATT Busy - Retrying...");
-                // Simple 1-time retry
-                setTimeout(async () => {
-                    try { await uartChar.writeValue(new TextEncoder().encode(str)); }
-                    catch(e2) { log("GATT blocked write."); }
-                }, 150);
-            }
+                await uartChar.writeValueWithoutResponse(new TextEncoder().encode(msg));
+                log("Sent: " + msg.trim());
+            } catch (e) { log("Write Failed. Retrying..."); }
+            setTimeout(() => { isSending = false; }, 300);
         }
-
-        init();
     </script>
 </body>
 </html>
