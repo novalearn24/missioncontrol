@@ -1,45 +1,46 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>AI Robot Dashboard - Final Binary Build</title>
+    <title>AI Robot Dashboard - Technical Build</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier"></script>
     <style>
-        body { font-family: sans-serif; text-align: center; background: #0f172a; color: white; padding: 20px; }
-        .control-panel { background: #1e293b; padding: 20px; border-radius: 20px; border: 2px solid #334155; margin-bottom: 20px; }
-        .btn { padding: 15px 25px; margin: 10px; border-radius: 12px; border: none; cursor: pointer; font-weight: bold; color: white; font-size: 1rem; }
-        .btn-purple { background: #8b5cf6; }
-        .btn-blue { background: #2563eb; }
-        .btn-gray { background: #4b5563; }
-        #webcam { width: 320px; border-radius: 20px; border: 4px solid #3b82f6; transform: scaleX(-1); margin-top: 10px; background: #000; }
-        .box-container { display: flex; justify-content: center; gap: 10px; margin-top: 20px; }
-        .box { width: 140px; padding: 20px; border-radius: 15px; opacity: 0.2; font-weight: 800; border: 2px solid rgba(255,255,255,0.1); transition: 0.1s; }
-        .active { opacity: 1; transform: scale(1.1); box-shadow: 0 0 20px #3b82f6; border-color: white; }
-        #box-0 { background: #a4c639; color: #1a1a2e; } 
-        #box-1 { background: #e94e24; }
-        #log { background: #000; padding: 15px; height: 150px; overflow-y: auto; margin: 20px auto; max-width: 500px; font-family: monospace; font-size: 11px; text-align: left; color: #4ade80; border-radius: 10px; border: 1px solid #334155; }
+        body { font-family: 'Courier New', Courier, monospace; text-align: center; background: #0a0f1e; color: #00ffcc; padding: 20px; margin: 0; }
+        .container { max-width: 800px; margin: 0 auto; border: 1px solid #00ffcc; padding: 20px; border-radius: 10px; box-shadow: 0 0 20px rgba(0, 255, 204, 0.2); }
+        .control-panel { background: #111b33; padding: 20px; border-radius: 10px; border: 1px solid #334155; margin-bottom: 20px; }
+        .btn { padding: 15px 25px; margin: 8px; border-radius: 5px; border: 1px solid #00ffcc; cursor: pointer; font-weight: bold; color: #00ffcc; background: transparent; font-size: 1rem; text-transform: uppercase; transition: 0.3s; }
+        .btn:hover { background: #00ffcc; color: #0a0f1e; box-shadow: 0 0 15px #00ffcc; }
+        .btn-main { width: 100%; font-size: 1.2rem; margin-bottom: 15px; border-width: 2px; }
+        #webcam { width: 320px; border-radius: 10px; border: 2px solid #00ffcc; transform: scaleX(-1); background: #000; margin-top: 10px; }
+        .box-container { display: flex; justify-content: center; gap: 15px; margin-top: 20px; }
+        .box { width: 150px; padding: 20px; border-radius: 5px; opacity: 0.2; font-weight: 800; border: 1px solid #00ffcc; transition: 0.2s; }
+        .active { opacity: 1; background: rgba(0, 255, 204, 0.2); box-shadow: 0 0 20px #00ffcc; }
+        #log { background: #000; padding: 15px; height: 180px; overflow-y: auto; margin: 25px auto; max-width: 600px; font-size: 12px; text-align: left; color: #00ffcc; border: 1px solid #00ffcc; border-radius: 5px; }
     </style>
 </head>
 <body>
 
-    <h2>🛰️ AI MISSION CONTROL</h2>
+    <div class="container">
+        <h2>>> AI_UART_PROTOCOL_v3.0</h2>
 
-    <div class="control-panel">
-        <button class="btn btn-purple" onclick="startCamera()">1. START CAMERA & AI</button>
-        <button class="btn btn-blue" onclick="connectBT()">2. CONNECT MICRO:BIT</button>
-        <button class="btn btn-gray" onclick="document.getElementById('loader').click()">3. UPLOAD MODEL (.JSON)</button>
-        <input type="file" id="loader" style="display:none" onchange="loadModel(event)">
+        <div class="control-panel">
+            <button class="btn btn-main" onclick="startCamera()">[01] Initialize AI & Camera</button>
+            <br>
+            <button class="btn" onclick="connectBT()">[02] Sync Bluetooth</button>
+            <button class="btn" onclick="document.getElementById('loader').click()">[03] Load Neural Map</button>
+            <input type="file" id="loader" style="display:none" onchange="loadModel(event)">
+        </div>
+
+        <video autoplay playsinline muted id="webcam"></video>
+        
+        <div class="box-container">
+            <div id="box-0" class="box">CLASS_0<br>(CMD: "me")</div>
+            <div id="box-1" class="box">CLASS_1<br>(CMD: "wamao")</div>
+        </div>
+
+        <div id="log">Console Ready. Waiting for user input...</div>
     </div>
-
-    <video autoplay playsinline muted id="webcam"></video>
-    
-    <div class="box-container">
-        <div id="box-0" class="box">CLASS: ME<br>(Pins P0 -> 0°)</div>
-        <div id="box-1" class="box">CLASS: WAMAO<br>(Pins P0 -> 90°)</div>
-    </div>
-
-    <div id="log">Logs: Ready to initialize.</div>
 
     <script>
         let net, classifier, uartChar;
@@ -47,43 +48,56 @@
         let isSending = false;
         const video = document.getElementById('webcam');
 
+        // OFFICIAL MICRO:BIT UART UUIDS (FROM LANCASTER DOCS)
+        const UART_SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+        const UART_RX_CHARACTERISTIC = '6e400002-b5a3-f393-e0a9-e50e24dcca9e'; // For sending TO micro:bit
+
         function log(msg) {
             const l = document.getElementById('log');
             l.innerHTML += "> " + msg + "<br>";
             l.scrollTop = l.scrollHeight;
         }
 
-        // STEP 1: CAMERA & AI
         async function startCamera() {
-            log("Requesting Camera...");
+            log("Accessing media devices...");
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true });
                 video.srcObject = stream;
-                log("✅ Camera Active");
-                log("Loading MobileNet... (please wait)");
+                log("Camera feed synced.");
+                log("Loading MobileNet weights...");
                 net = await mobilenet.load();
                 classifier = knnClassifier.create();
-                log("✅ AI READY");
+                log("AI Logic Engine Live.");
                 loop();
-            } catch (e) { log("❌ Camera Error: " + e.message); }
+            } catch (e) {
+                log("CRITICAL ERROR: " + e.message);
+            }
         }
 
-        // STEP 2: BLUETOOTH (BINARY MODE)
         async function connectBT() {
             try {
-                log("Opening Bluetooth selector...");
+                log("Scanning for BBC micro:bit BLE advertising...");
                 const device = await navigator.bluetooth.requestDevice({
-                    acceptAllDevices: true,
-                    optionalServices: ['6e400001-b5a3-f393-e0a9-e50e24dcca9e']
+                    filters: [{ namePrefix: 'BBC micro:bit' }],
+                    optionalServices: [UART_SERVICE_UUID]
                 });
+
+                log("Establishing GATT connection...");
                 const server = await device.gatt.connect();
-                const service = await server.getPrimaryService('6e400001-b5a3-f393-e0a9-e50e24dcca9e');
-                uartChar = await service.getCharacteristic('6e400002-b5a3-f393-e0a9-e50e24dcca9e');
-                log("✅ CONNECTED TO HARDWARE!");
-            } catch (e) { log("❌ BT Error: " + e.message); }
+                
+                log("Requesting UART Service...");
+                const service = await server.getPrimaryService(UART_SERVICE_UUID);
+                
+                log("Binding to RX Characteristic...");
+                // We use 0002 as the "RX" characteristic to send data TO the bit
+                uartChar = await service.getCharacteristic(UART_RX_CHARACTERISTIC);
+                
+                log("✅ SYSTEM SYNC COMPLETE. UART READY.");
+            } catch (e) {
+                log("SYNC FAILED: " + e.message);
+            }
         }
 
-        // STEP 3: UPLOAD JSON
         async function loadModel(event) {
             const reader = new FileReader();
             reader.onload = async (e) => {
@@ -94,13 +108,14 @@
                         ds[k] = tf.tensor2d(model.data[k], [model.data[k].length/1024, 1024]);
                     });
                     classifier.setClassifierDataset(ds);
-                    log("✅ AI Model Loaded successfully!");
-                } catch(err) { log("❌ JSON Error: Check your file."); }
+                    log("✅ Neural Map loaded successfully.");
+                } catch(err) {
+                    log("FILE ERROR: Check JSON integrity.");
+                }
             };
             reader.readAsText(event.target.files[0]);
         }
 
-        // PREDICTION LOOP
         async function loop() {
             if (classifier && classifier.getNumClasses() > 0 && video.readyState >= 2) {
                 const img = tf.browser.fromPixels(video);
@@ -113,40 +128,37 @@
                 document.getElementById('box-1').classList.toggle('active', id == 1);
 
                 let signal = (id == 0) ? "me" : "wamao";
+                
                 if (signal !== lastSent && !isSending) {
-                    sendRawBinary(signal);
+                    sendData(signal + "\n");
                     lastSent = signal;
                 }
             }
             requestAnimationFrame(loop);
         }
 
-        // --- THE BINARY FIX ---
-        async function sendRawBinary(command) {
+        async function sendData(msg) {
             if (!uartChar || isSending) return;
             isSending = true;
 
             try {
-                let data;
-                if (command === "me") {
-                    // ASCII: m(109), e(101), NewLine(10)
-                    data = new Uint8Array([109, 101, 10]);
-                } else {
-                    // ASCII: w(119), a(97), m(109), a(97), o(111), NewLine(10)
-                    data = new Uint8Array([119, 97, 109, 97, 111, 10]);
-                }
+                // Per documentation, we use US-ASCII encoding
+                const encoder = new TextEncoder(); // Default is UTF-8, which matches ASCII for these strings
+                const data = encoder.encode(msg);
 
-                log("Sending Bytes: " + data.join(','));
+                // Documentation says max 20 bytes per packet. 
+                // "me\n" (3 bytes) and "wamao\n" (6 bytes) are well within limits.
+                log("Transmitting: " + msg.trim());
                 
-                // WriteValueWithoutResponse is the most "permissive" write mode on Mac
+                // Write without response to bypass GATT congestion
                 await uartChar.writeValueWithoutResponse(data);
                 
             } catch (e) {
-                log("Write Failed: " + e.message);
+                log("TX FAILURE: " + e.message);
             }
 
-            // Small delay to prevent crashing the Micro:bit's buffer
-            setTimeout(() => { isSending = false; }, 600);
+            // Standard UART cooldown to allow buffer processing on micro:bit
+            setTimeout(() => { isSending = false; }, 500);
         }
     </script>
 </body>
