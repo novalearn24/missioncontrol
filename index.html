@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>AI Robot Dashboard - V3.1 Debug Build</title>
+    <title>AI Robot - Precision Sync</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier"></script>
@@ -22,7 +22,7 @@
 <body>
 
     <div class="container">
-        <h2>>> AI_UART_PROTOCOL_v3.1_DEBUG</h2>
+        <h2>>> AI_UART_PRECISION_v4.0</h2>
 
         <div class="control-panel">
             <button class="btn btn-main" onclick="startCamera()">[01] Initialize AI & Camera</button>
@@ -35,8 +35,8 @@
         <video autoplay playsinline muted id="webcam"></video>
         
         <div class="box-container">
-            <div id="box-0" class="box">CLASS_0<br>(CMD: "me")</div>
-            <div id="box-1" class="box">CLASS_1<br>(CMD: "wamao")</div>
+            <div id="box-0" class="box">CLASS_0<br>("me")</div>
+            <div id="box-1" class="box">CLASS_1<br>("wamao")</div>
         </div>
 
         <div id="log">Console Ready. System awaiting neural map...</div>
@@ -57,27 +57,21 @@
         }
 
         async function startCamera() {
-            log("Accessing media devices...");
+            log("Accessing camera...");
             try {
                 const video = document.getElementById('webcam');
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true });
                 video.srcObject = stream;
-                log("Camera feed synced.");
-                
-                log("Loading MobileNet weights...");
                 net = await mobilenet.load();
                 classifier = knnClassifier.create();
-                log("AI Engine Live. Now load [03] Neural Map.");
-                
+                log("AI Engine Live.");
                 requestAnimationFrame(loop);
-            } catch (e) {
-                log("CRITICAL ERROR: " + e.message);
-            }
+            } catch (e) { log("CRITICAL ERROR: " + e.message); }
         }
 
         async function connectBT() {
             try {
-                log("Scanning for BBC micro:bit...");
+                log("Scanning for micro:bit...");
                 const device = await navigator.bluetooth.requestDevice({
                     filters: [{ namePrefix: 'BBC micro:bit' }],
                     optionalServices: [UART_SERVICE_UUID]
@@ -85,34 +79,22 @@
                 const server = await device.gatt.connect();
                 const service = await server.getPrimaryService(UART_SERVICE_UUID);
                 uartChar = await service.getCharacteristic(UART_RX_CHARACTERISTIC);
-                log("✅ BT SYNC COMPLETE. UART READY.");
+                log("✅ BT SYNC COMPLETE.");
             } catch (e) { log("SYNC FAILED: " + e.message); }
         }
 
         async function loadModel(event) {
-            log("Reading JSON file...");
             const reader = new FileReader();
             reader.onload = async (e) => {
                 try {
                     const modelJson = JSON.parse(e.target.result);
-                    
-                    // Robust check: ensure the data structure matches expectations
-                    if (!modelJson.data) {
-                        throw new Error("Invalid JSON: Missing 'data' key.");
-                    }
-
                     const ds = {};
                     Object.keys(modelJson.data).forEach(k => {
                         ds[k] = tf.tensor2d(modelJson.data[k], [modelJson.data[k].length/1024, 1024]);
                     });
-                    
                     classifier.setClassifierDataset(ds);
-                    log("✅ NEURAL MAP ACTIVE. Analyzing frames...");
-                    log("Classes found: " + Object.keys(ds).length);
-                } catch(err) {
-                    log("❌ LOAD FAILED: " + err.message);
-                    console.error(err);
-                }
+                    log("✅ NEURAL MAP ACTIVE.");
+                } catch(err) { log("❌ LOAD FAILED."); }
             };
             reader.readAsText(event.target.files[0]);
         }
@@ -131,8 +113,9 @@
 
                 let signal = (id == 0) ? "me" : "wamao";
                 
+                // We send the signal + a colon delimiter
                 if (signal !== lastSent && !isSending) {
-                    sendData(signal + "\n");
+                    sendData(signal + ":");
                     lastSent = signal;
                 }
             }
@@ -143,14 +126,13 @@
             if (!uartChar || isSending) return;
             isSending = true;
             try {
+                // Sending raw bytes to avoid any encoding weirdness
                 const encoder = new TextEncoder();
                 const data = encoder.encode(msg);
-                log("TX >> " + msg.trim());
                 await uartChar.writeValueWithoutResponse(data);
-            } catch (e) {
-                log("TX ERROR: " + e.message);
-            }
-            setTimeout(() => { isSending = false; }, 600);
+                log("TX >> " + msg);
+            } catch (e) { log("TX ERROR: " + e.message); }
+            setTimeout(() => { isSending = false; }, 800);
         }
     </script>
 </body>
