@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>AI Robot - Precision Sync</title>
+    <title>AI Robot - v4.1 Final Sync</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier"></script>
@@ -22,7 +22,7 @@
 <body>
 
     <div class="container">
-        <h2>>> AI_UART_PRECISION_v4.0</h2>
+        <h2>>> AI_UART_SYNC_v4.1</h2>
 
         <div class="control-panel">
             <button class="btn btn-main" onclick="startCamera()">[01] Initialize AI & Camera</button>
@@ -35,11 +35,11 @@
         <video autoplay playsinline muted id="webcam"></video>
         
         <div class="box-container">
-            <div id="box-0" class="box">CLASS_0<br>("me")</div>
-            <div id="box-1" class="box">CLASS_1<br>("wamao")</div>
+            <div id="box-0" class="box">CLASS: ME<br>(Send "me:")</div>
+            <div id="box-1" class="box">CLASS: WAMAO<br>(Send "wamao:")</div>
         </div>
 
-        <div id="log">Console Ready. System awaiting neural map...</div>
+        <div id="log">Waiting for system start...</div>
     </div>
 
     <script>
@@ -57,21 +57,22 @@
         }
 
         async function startCamera() {
-            log("Accessing camera...");
+            log("Opening camera stream...");
             try {
                 const video = document.getElementById('webcam');
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true });
                 video.srcObject = stream;
+                log("Loading AI Brain...");
                 net = await mobilenet.load();
                 classifier = knnClassifier.create();
-                log("AI Engine Live.");
+                log("AI Engine Ready.");
                 requestAnimationFrame(loop);
-            } catch (e) { log("CRITICAL ERROR: " + e.message); }
+            } catch (e) { log("CAMERA ERROR: " + e.message); }
         }
 
         async function connectBT() {
             try {
-                log("Scanning for micro:bit...");
+                log("Searching for BBC micro:bit...");
                 const device = await navigator.bluetooth.requestDevice({
                     filters: [{ namePrefix: 'BBC micro:bit' }],
                     optionalServices: [UART_SERVICE_UUID]
@@ -79,8 +80,8 @@
                 const server = await device.gatt.connect();
                 const service = await server.getPrimaryService(UART_SERVICE_UUID);
                 uartChar = await service.getCharacteristic(UART_RX_CHARACTERISTIC);
-                log("✅ BT SYNC COMPLETE.");
-            } catch (e) { log("SYNC FAILED: " + e.message); }
+                log("✅ BLUETOOTH CONNECTED.");
+            } catch (e) { log("BT FAIL: " + e.message); }
         }
 
         async function loadModel(event) {
@@ -94,7 +95,7 @@
                     });
                     classifier.setClassifierDataset(ds);
                     log("✅ NEURAL MAP ACTIVE.");
-                } catch(err) { log("❌ LOAD FAILED."); }
+                } catch(err) { log("JSON ERROR: File corrupted."); }
             };
             reader.readAsText(event.target.files[0]);
         }
@@ -111,9 +112,9 @@
                 document.getElementById('box-0').classList.toggle('active', id == 0);
                 document.getElementById('box-1').classList.toggle('active', id == 1);
 
+                // MATCHING YOUR BLOCKS EXACTLY: "me" and "wamao"
                 let signal = (id == 0) ? "me" : "wamao";
                 
-                // We send the signal + a colon delimiter
                 if (signal !== lastSent && !isSending) {
                     sendData(signal + ":");
                     lastSent = signal;
@@ -126,12 +127,17 @@
             if (!uartChar || isSending) return;
             isSending = true;
             try {
-                // Sending raw bytes to avoid any encoding weirdness
                 const encoder = new TextEncoder();
                 const data = encoder.encode(msg);
+                // Using writeValueWithoutResponse to ensure Mac doesn't block
                 await uartChar.writeValueWithoutResponse(data);
-                log("TX >> " + msg);
-            } catch (e) { log("TX ERROR: " + e.message); }
+                log("SENT TO MICROBIT: " + msg);
+            } catch (e) {
+                log("BT SEND ERROR: " + e.message);
+                // If it fails, try to re-bind characteristic
+                uartChar = null; 
+            }
+            // Cooldown to prevent flooding the 60-byte Micro:bit buffer
             setTimeout(() => { isSending = false; }, 800);
         }
     </script>
